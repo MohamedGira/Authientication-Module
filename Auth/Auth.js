@@ -227,4 +227,74 @@ exports.logout =(req,res,next)=>{
     })
 }
 
+exports.resetPassword=(req,res)=>{
+    const email=req.body.email;
+    User.findOne({email:email}).then((user)=>{
+        if (user){
+            const PasswordResetSender=new MailSender(process.env.SMTP_HOST,process.env.SMTP_PORT,false,process.env.APP_EMAIL,process.env.APP_PASSWORD)
+            const resetToken=jwt.sign({email:email,password:user.password},process.env.RESET_JWT_KEY,{expiresIn:utils.PASSWORD_RESET_TIMEOUT_SECS})
+            
+            PasswordResetSender.sendHTMLMail(email,"Reset Password",
+            fs.readFile(__dirname+'\\..\\utils\\reset_password.html').toString().replace('{myJWT}',resetToken).replace('{expiration_time}',utils.PASSWORD_RESET_TIMEOUT_MINS)).then(()=>{
+                return res.status(200).json({
+                    message:"email sent"
+                })  
+            
+            })
+            
+        }else{
+            return res.status(400).json({
+                message:"make sure to enter a valid"
+            })  
+        }
+    })
+}
+
+exports.changePassword=async(req,res)=>{
+    const newPassword=req.body.password;
+    const confirm_newPassword=req.body.confirm_password
+    const confirmationToken=req.body.token
+    if(newPassword!==confirm_newPassword){
+        return res.status(400).json({
+            message:"passwords are not the same"
+        })   
+    }
+    if(!checkPassword(newPassword)){
+        return res.status(400).json({
+            message:"password is either too short or to long (must be >6 letters)"
+        })  
+    } 
+
+    await jwt.verify(confirmationToken,process.env.RESET_JWT_KEY, (err,decodedvalues)=>{
+        if(err){
+            return res.status(400).json({
+                message:"request Expired"
+            })    
+        }else{
+            User.findOne({email:decodedvalues.email}).then(
+                user=>{if(user.password===decodedvalues.password){
+                    bcrypt.hash(newPassword, 10, (err, hash)=>{
+    
+                        User.updateOne({email:decodedvalues.email},{password:hash}).then(()=>{
+                            return res.status(200).json({
+                                message:"password changed succesfully"
+                            })    
+                        })
+                        
+                        
+                    })
+                }else{
+                    return res.status(200).json({
+                        message:"password has already been changed once"
+                    })    
+                }}
+            )
+            
+        }
+})
+    
+
+}
+
+
 

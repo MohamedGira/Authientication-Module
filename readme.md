@@ -15,7 +15,7 @@ npm install
   
 ___
 ## Usage
-The authentication methods found [here](../Authentication/Auth/Auth.js) can be used as follows.
+The authentication methods found [here](/Auth/Auth.js) can be used as follows.
 ### register
 This method accepts 3 parameters (username, email, password)in a POST request. do the necessary validations and constraints via ```checkSignupInfo```, ```checkPassword``` methods, registers the user in the DB, and sends a confirmation email to the user via ```MailSender``` class.
 

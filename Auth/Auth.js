@@ -90,6 +90,19 @@ function createUser(req, res, username, email, passwordPlainText) {
     };
   })
 }
+function  isLoggedIn(req){
+  const token = req.cookies.jwt;
+  if (!token)  
+    return false;  
+  return jwt.verify(token, process.env.JWT_KEY, (err, decodedvalues) => {
+    if(err)
+      throw new Error("invalid token");
+    if(decodedvalues.username)
+      return true;
+    else
+      return false;
+  });      
+}
 
 exports.confirmRegistration = async (req, res) => {
   const reqtoken = req.query.token;
@@ -151,7 +164,11 @@ exports.register = async (req, res) => {
   const username = req.body.username;
   const passwordPlainText = req.body.password;
   const email = req.body.email;
-
+  if( isLoggedIn(req)){
+    return res.status(400).json({
+      message: "a user is already logged in",
+    });
+  }
   if (!checkSignupInfo(req, res, username, email, passwordPlainText)) return;
 
   const user = await User.findOne({ username: username, email: email });
@@ -202,7 +219,12 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res, next) => {
   try {
-    
+    if( isLoggedIn(req)){
+      return res.status(400).json({
+        message: "a user is already logged in",
+      });
+    }
+    else{
     const email = req.body.email;
     const passwordPlainText = req.body.password;
     const user = await User.findOne({ email: email });
@@ -236,7 +258,7 @@ exports.login = async (req, res, next) => {
         message: "User signed in succesfully",
         user: user._id,
       });
-  } catch (error) {
+  }} catch (error) {
     res.status(400).json({
       message: "An error occurred",
       error: error.message,
@@ -258,6 +280,12 @@ exports.logout = (req, res, next) => {
 };
 
 exports.resetPassword = async (req, res) => {
+  
+  if( isLoggedIn(req)){
+    return res.status(400).json({
+      message: "a user is already logged in",
+    });
+  }
   const email = req.body.email;
   const user = await User.findOne({ email: email });
 

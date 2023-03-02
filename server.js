@@ -35,7 +35,7 @@ app.use((err,res,req,next)=>{
 
     res.status(err.statusCode).json({
         status:err.status,
-        message: err.message||'sorry somthing went wrong :('
+        message: err.message||'sorry somthing went wrong :(' 
     })
 })
 app.listen(PORT, () => console.log(`connected on port ${PORT}`))

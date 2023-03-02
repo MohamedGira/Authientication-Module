@@ -1,5 +1,6 @@
-const User = require("../models/user");
-const Token = require("../models/tokenUserPairs");
+
+const MongooseDbManager= require("../models/mongoManager")
+console.log(MongooseDbManager)
 const utils = require("../utils/utilities");
 const sizeInBytes = utils.sizeInBytes;
 const MailSender = utils.MailSender;
@@ -73,8 +74,8 @@ function createUser(req, res, username, email, passwordPlainText) {
     );
 
     try {
-      const user = await User.create({ username: username, email: email, password: hash })
-      await Token.create({ userId: user._id, token: cofirmationToken })
+      const user = await MongooseDbManager.User.create({ username: username, email: email, password: hash })
+      await MongooseDbManager.Token.create({ userId: user._id, token: cofirmationToken })
 
       return res.status(200).json({
         message:
@@ -90,23 +91,25 @@ function createUser(req, res, username, email, passwordPlainText) {
     };
   })
 }
-function  isLoggedIn(req){
+exports.isLoggedIn=(req,res,next)=>{
   const token = req.cookies.jwt;
   if (!token)  
-    return false;  
+    return next();  
   return jwt.verify(token, process.env.JWT_KEY, (err, decodedvalues) => {
     if(err)
-      throw new Error("invalid token");
+      throw (err);
     if(decodedvalues.username)
-      return true;
+      return res.status(400).json({
+        message: "a user is already logged in",
+      }); 
     else
-      return false;
+      return next();
   });      
 }
 
 exports.confirmRegistration = async (req, res) => {
   const reqtoken = req.query.token;
-  const tokenUserPair = await Token.findOne({ token: reqtoken });
+  const tokenUserPair = await MongooseDbManager.Token.findOne({ token: reqtoken });
 
   if (!tokenUserPair)
     return res.status(401).json({ message: "Request Expired" });
@@ -116,7 +119,7 @@ exports.confirmRegistration = async (req, res) => {
     process.env.CONFIRMATION_JWT_KEY,
     async (err, decodedvalues) => {
       if (err) {
-        const user = User.findOne({ _id: tokenUserPair.userId });
+        const user = MongooseDbManager.User.findOne({ _id: tokenUserPair.userId });
 
         if (user) {
           if (user.confirmed) {
@@ -124,10 +127,10 @@ exports.confirmRegistration = async (req, res) => {
             return res.status(200).json({ message: "user already confirmed" });
           } else {
             //user is not confirmed and the JWT is expired
-            User.findByIdAndDelete(tokenUserPair.userId).catch((err) =>
+            MongooseDbManager.User.findByIdAndDelete(tokenUserPair.userId).catch((err) =>
               console.log(err)
             );
-            Token.deleteOne({ token: reqtoken }).catch((err) =>
+            MongooseDbManager.Token.deleteOne({ token: reqtoken }).catch((err) =>
               console.log(error)
             );
             return res
@@ -136,14 +139,14 @@ exports.confirmRegistration = async (req, res) => {
           }
         } else {
           console.trace("Shouldn't reach here");
-          Token.deleteOne({ token: reqtoken }).catch((err) =>
+          MongooseDbManager.Token.deleteOne({ token: reqtoken }).catch((err) =>
             console.log(error)
           );
           return res.status(401).json({ message: "no such user exists" });
         }
       } else {
         //token is valid
-        User.updateOne(
+        MongooseDbManager.User.updateOne(
           { _id: tokenUserPair.userId },
           { confirmed: true },
           (err, docs) => {
@@ -152,28 +155,24 @@ exports.confirmRegistration = async (req, res) => {
             }
           }
         );
-        Token.deleteOne({ token: reqtoken }).catch((err) => console.log(error));
+        MongooseDbManager.Token.deleteOne({ token: reqtoken }).catch((err) => console.log(error));
 
         return res.status(200).json({ message: "resgistration confirmed" });
       }
     }
   );
-};
+}; 
 
 exports.register = async (req, res) => {
   const username = req.body.username;
   const passwordPlainText = req.body.password;
   const email = req.body.email;
-  if( isLoggedIn(req)){
-    return res.status(400).json({
-      message: "a user is already logged in",
-    });
-  }
+ 
   if (!checkSignupInfo(req, res, username, email, passwordPlainText)) return;
 
-  const user = await User.findOne({ username: username, email: email });
+  const user = await MongooseDbManager.User.findOne({ username: username, email: email });
   if (!user) {
-    const user = await User.findOne({
+    const user = await MongooseDbManager.User.findOne({
       $or: [{ username: username }, { email: email }],
     });
 
@@ -191,7 +190,7 @@ exports.register = async (req, res) => {
     });
   }
 
-  const tokenUserPair = await Token.findOne({ userId: user._id });
+  const tokenUserPair = await MongooseDbManager.Token.findOne({ userId: user._id });
 
   if (tokenUserPair) {
     jwt.verify(
@@ -200,8 +199,8 @@ exports.register = async (req, res) => {
       async (err, decodedvalues) => {
         if (err) {
           try {
-            await User.findByIdAndDelete(tokenUserPair.userId);
-            await Token.findByIdAndDelete(tokenUserPair._id);
+            await MongooseDbManager.User.findByIdAndDelete(tokenUserPair.userId);
+            await MongooseDbManager.Token.findByIdAndDelete(tokenUserPair._id);
             return createUser(req, res, username, email, passwordPlainText);
           } catch (err) {
             console.log("???" + error);
@@ -219,15 +218,10 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res, next) => {
   try {
-    if( isLoggedIn(req)){
-      return res.status(400).json({
-        message: "a user is already logged in",
-      });
-    }
-    else{
+
     const email = req.body.email;
     const passwordPlainText = req.body.password;
-    const user = await User.findOne({ email: email });
+    const user = await MongooseDbManager.User.findOne({ email: email });
 
     if (!user) {
       return res.status(400).json({
@@ -258,7 +252,7 @@ exports.login = async (req, res, next) => {
         message: "User signed in succesfully",
         user: user._id,
       });
-  }} catch (error) {
+  } catch (error) {
     res.status(400).json({
       message: "An error occurred",
       error: error.message,
@@ -281,13 +275,9 @@ exports.logout = (req, res, next) => {
 
 exports.resetPassword = async (req, res) => {
   
-  if( isLoggedIn(req)){
-    return res.status(400).json({
-      message: "a user is already logged in",
-    });
-  }
+
   const email = req.body.email;
-  const user = await User.findOne({ email: email });
+  const user = await MongooseDbManager.User.findOne({ email: email });
 
   if (!user) {
     return res.status(400).json({
@@ -350,12 +340,12 @@ exports.changePassword = async (req, res) => {
           message: "request Expired",
         });
       }
-      const user = await User.findOne({ email: decodedvalues.email });
+      const user = await MongooseDbManager.User.findOne({ email: decodedvalues.email });
 
       if (user.password === decodedvalues.password) {
         try {
           const hash = await promisify(bcrypt.hash)(newPassword, 10);
-          await User.updateOne(
+          await MongooseDbManager.User.updateOne(
             { email: decodedvalues.email },
             { password: hash }
           );

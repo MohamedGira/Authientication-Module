@@ -4,7 +4,7 @@ const sizeInBytes=require("./utils/utilities")
 const cookieParser =require("cookie-parser")
 const authenticators=require("./middleware/Auth")
 const app = express()
-
+const cors= require('cors')
 const PORT = 5000
 connectDB()
 
@@ -12,11 +12,12 @@ connectDB()
 app.use(express.json())
 app.use(express.urlencoded({extended:true}))
 app.use(cookieParser());
-    
+app.use(cors({origin:""}))
+app.use(express.static(`${__dirname}\\front`))
 
-app.use('/api/auth',require('./Auth/route'))
-app.use('/admin',authenticators.authenticateAdmin,(req,res)=>res.json({message:"admin route"}))
-app.use('/basic',authenticators.authenticateBasic,(req,res)=>res.json({message:"basic route"}))
+app.use('/api/v1/auth',require('./Auth/route'))
+app.use('/api/v1/admin',authenticators.authenticateAdmin,(req,res)=>res.json({message:"admin route"}))
+app.use('/api/v1/basic',authenticators.authenticateBasic,(req,res)=>res.json({message:"basic route"}))
 
 
 

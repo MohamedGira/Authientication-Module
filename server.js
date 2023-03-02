@@ -1,6 +1,6 @@
 const connectDB=require('./models/db')
 const express = require("express")
-const sizeInBytes=require("./utils/utilities")
+const utils=require("./utils/utilities")
 const cookieParser =require("cookie-parser")
 const authenticators=require("./middleware/Auth")
 const app = express()
@@ -20,12 +20,23 @@ app.use('/api/v1/admin',authenticators.authenticateAdmin,(req,res)=>res.json({me
 app.use('/api/v1/basic',authenticators.authenticateBasic,(req,res)=>res.json({message:"basic route"}))
 
 
-
 app.all('*',(req,res)=>{
-    res.status(404).json({
-        message: "cant find this api",
-        path:req.path 
+    return res.status(404).json({
+        status:404,
+        message: `cant find this route :${req.path},${req.method}` 
+    })
+    
+})
+
+app.use((err,req,res,next)=>{
+    
+    err.statusCode=err.statusCode||500;
+    err.status=err.status||'Server Error';
+    return res.status(err.statusCode).json({
+        status:err.status,
+        message: err.message||'sorry somthing went wrong :(' 
     })
 })
+
+
 app.listen(PORT, () => console.log(`connected on port ${PORT}`))
- 

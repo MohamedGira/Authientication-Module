@@ -48,6 +48,15 @@ exports.MailSender =class MailSender{
     }
 }
 
+exports.ErrorWrapper=(status,statusCode,message,source='')=>{
+  var err=new Error(message);
+  err.status=status;
+  err.statusCode=statusCode;
+  err.source=source
+  return err
+}
+
+
 exports.REGISTRATION_TIMEOUT_HOURS=1
 exports.REGISTRATION_TIMEOUT_MINS=exports.REGISTRATION_TIMEOUT_HOURS*60
 exports.REGISTRATION_TIMEOUT_SECS=exports.REGISTRATION_TIMEOUT_HOURS*3600

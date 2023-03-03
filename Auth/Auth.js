@@ -167,7 +167,7 @@ exports.confirmRegistration = async (req, res, next) => {
 };
 
 exports.register = async (req, res, next) => {
-  console.log('register')
+ 
   const username = req.body.username;
   const passwordPlainText = req.body.password;
   const email = req.body.email;

@@ -1,17 +1,18 @@
 const jwt=require('jsonwebtoken')
 require('dotenv').config()
-
+const MError=require('../utils/AppError')
 
 exports.authenticateAdmin=(req,res,next)=>{
     const token=req.cookies.jwt;
     if(!token)
-        return res.status(401).json({ message: "Not authorized, token not available" })
+        return next(new MError(401,'token not available'))
+    
     
     jwt.verify(token,process.env.JWT_KEY,(err,decodedvalues)=>{
         if (err)
-             return res.status(401).json({ message: "token invalid" });
+             return next(new MError(401,'token invalid'))
         if (decodedvalues.role!=="admin")
-              return res.status(401).json({ message: "Not authorized" });
+            return next(new MError(401,'Not authorized'))
         next()
 
     })
@@ -20,13 +21,14 @@ exports.authenticateAdmin=(req,res,next)=>{
 exports.authenticateBasic=(req,res,next)=>{
     const token=req.cookies.jwt;
     if(!token)
-        return res.status(401).json({ message: "Not authorized, token not available" })
+     return next(new MError(401,'token not available'))
+
     
     jwt.verify(token,process.env.JWT_KEY,(err,decodedvalues)=>{
         if (err)
-             return res.status(401).json({ message: "token invalid" });
+            return next(new MError(401,'token invalid'))
         if (decodedvalues.role!=="basic")
-            return res.status(401).json({ message: "Not authorized" });
+            return next(new MError(401,'Not authorized'))
         next()
 
     })

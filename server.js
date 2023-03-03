@@ -15,6 +15,9 @@ app.use(cookieParser());
 app.use(cors({origin:""}))
 app.use(express.static(`${__dirname}\\front`))
 
+app.get('/',(req,res)=>{
+    res.redirect('/form.html')
+})
 app.use('/api/v1/auth',require('./Auth/route'))
 app.use('/api/v1/admin',authenticators.authenticateAdmin,(req,res)=>res.json({message:"admin route"}))
 app.use('/api/v1/basic',authenticators.authenticateBasic,(req,res)=>res.json({message:"basic route"}))

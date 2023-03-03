@@ -1,11 +1,11 @@
 const MongooseDbManager = require("../models/mongoManager");
 const utils = require("../utils/utilities");
 const sizeInBytes = utils.sizeInBytes;
-const MailSender = utils.MailSender;
+const MailSender = require('../utils/MailSender');
 const bcrypt = require("bcryptjs");
 const validator = require("validator");
 const jwt = require("jsonwebtoken");
-const MError = utils.ErrorWrapper;
+const  MError =  require('../utils/AppError');
 var fs = require("fs");
 const { promisify } = require("util");
 const { resolve } = require("path");
@@ -31,15 +31,15 @@ function checkSignupInfo(req, res, username, email, passwordPlainText) {
       message: "missing data",
     });
     return false */
-    return MError(400, "missing data");
+    return new MError(400, "missing data");
   }
 
   if (!validator.isEmail(email)) {
-    return MError(400, "invalid email address");
+    return new MError(400, "invalid email address");
   }
 
   if (!checkPassword(passwordPlainText)) {
-    return MError(
+    return new MError(
       400,
       "password is either too short or too long (must be >6 letters)"
     );
@@ -47,51 +47,58 @@ function checkSignupInfo(req, res, username, email, passwordPlainText) {
   return null;
 }
 
+const catchAsync= (fn)=>{
+return(req,res,next)=>{
+  fn(req,res,next).catch(err=>next)
+} 
+}
+
 async function createUser(req, res, username, email, passwordPlainText) {
   //returns promise =>true
   /*
   creates user at the database and sends confirmation email, 
   */
-  return new Promise(resolve => {
-    bcrypt.hash(passwordPlainText, 10, async (err, hash) => {
-      const registrationConfirmer = new MailSender(
-        process.env.SMTP_HOST,
-        process.env.SMTP_PORT,
-        false,
-        process.env.APP_EMAIL,
-        process.env.APP_PASSWORD
-      );
-      const cofirmationToken = jwt.sign({}, process.env.CONFIRMATION_JWT_KEY, {
-        expiresIn: utils.REGISTRATION_TIMEOUT_SECS,
-      });
-      await registrationConfirmer.sendHTMLMail(
-        email,
-        "Confirm Registration",
-        fs
-          .readFileSync(__dirname + "\\..\\utils\\confirm_registration.html")
-          .toString()
-          .replace("{myJWT}", cofirmationToken)
-          .replace("{expiration_time}", utils.REGISTRATION_TIMEOUT_MINS)
-      );
+  try{
+  const hash= await promisify(bcrypt.hash)(passwordPlainText, 10)
+  const registrationConfirmer = new MailSender(
+    process.env.SMTP_HOST,
+    process.env.SMTP_PORT,
+    false,
+    process.env.APP_EMAIL,
+    process.env.APP_PASSWORD
+  );
+  const cofirmationToken = jwt.sign({}, process.env.CONFIRMATION_JWT_KEY, {
+    expiresIn: utils.REGISTRATION_TIMEOUT_SECS,
+  });
+  await registrationConfirmer.sendHTMLMail(
+    email,
+    "Confirm Registration",
+    fs
+      .readFileSync(__dirname + "\\..\\utils\\confirm_registration.html")
+      .toString()
+      .replace("{myJWT}", cofirmationToken)
+      .replace("{expiration_time}", utils.REGISTRATION_TIMEOUT_MINS)
+  );
 
-      try {
-        const user = await MongooseDbManager.User.create({
-          username: username,
-          email: email,
-          password: hash,
-        });
-        await MongooseDbManager.Token.create({
-          userId: user._id,
-          token: cofirmationToken,
-        });
-        resolve(true);
-      } catch (err) {
-        resolve(MError(400, "User couldn't be created"));
-      }
-    });
-  })
+  const user = await MongooseDbManager.User.create({
+    username: username,
+    email: email,
+    password: hash,
+  });
+  await MongooseDbManager.Token.create({
+    userId: user._id,
+    token: cofirmationToken,
+  });
+  return true;
 
+}catch(err){
+  return err;
 }
+}
+
+
+
+
 exports.isLoggedIn = (req, res, next) => {
   const token = req.cookies.jwt;
   if (!token) return next();
@@ -101,7 +108,7 @@ exports.isLoggedIn = (req, res, next) => {
       throw err;
     }
     if (decodedvalues.username)
-      return next(MError(400, "a user is already logged in"));
+      return next(new MError(400, "a user is already logged in"));
     else return next();
   });
 };
@@ -113,7 +120,7 @@ exports.confirmRegistration = async (req, res, next) => {
   });
 
   if (!tokenUserPair) {
-    return next(MError(201, "Request Expired"));
+    return next(new MError(201, "Request Expired"));
   }
 
   jwt.verify(
@@ -137,14 +144,14 @@ exports.confirmRegistration = async (req, res, next) => {
             MongooseDbManager.Token.deleteOne({ token: reqtoken }).catch(
               (err) => console.log(error)
             );
-            return next(MError(201, "request expired, register again"));
+            return next(new MError(201, "request expired, register again"));
           }
         } else {
           console.trace("Shouldn't reach here");
           MongooseDbManager.Token.deleteOne({ token: reqtoken }).catch((err) =>
             console.log(error)
           );
-          return next(MError(201, "no such user exists"));
+          return next(new MError(201, "no such user exists"));
         }
       } else {
         //token is valid
@@ -189,7 +196,7 @@ exports.register = async (req, res, next) => {
       $or: [{ username: username }, { email: email }],
     });
     if (user)
-      return next(MError(409, "username or email already in use"));
+      return next(new MError(409, "username or email already in use"));
 
     const usercreatedSuccessfully = await createUser(req, res, username, email, passwordPlainText)
     if (usercreatedSuccessfully !== true) {
@@ -204,7 +211,7 @@ exports.register = async (req, res, next) => {
     //this user is in the database he might be not confirmed
 
     if (user.confirmed)
-      return next(MError(400, "username or email already confirmed and in use"));
+      return next(new MError(400, "username or email already confirmed and in use"));
 
     //this user is confirmed
 
@@ -233,7 +240,7 @@ exports.register = async (req, res, next) => {
               });
 
             } catch (err) {
-              console.log("???" + error);
+               return err
             }
           } else {
             return res.status(200).json({
@@ -254,15 +261,15 @@ exports.register = async (req, res, next) => {
       const user = await MongooseDbManager.User.findOne({ email: email });
 
       if (!user) {
-        return next(MError(400, "invalid email"));
+        return next(new MError(400, "invalid email"));
       }
       const compare = await bcrypt.compare(passwordPlainText, user.password);
       if (!compare) {
-        return next(MError(400, "invalid password"));
+        return next(new MError(400, "invalid password"));
       }
       if (!user.confirmed) {
         return next(
-          MError(401, "This account isn't confirmed, check your email")
+          new MError(401, "This account isn't confirmed, check your email")
         );
       }
 
@@ -279,16 +286,16 @@ exports.register = async (req, res, next) => {
           user: user._id,
         });
     } catch (error) {
-      return next(MError(401, error.message));
+      return next(new MError(401, error.message));
     }
   };
 
   exports.logout = (req, res, next) => {
     const token = req.cookies.jwt;
-    if (!token) return next(MError(401, "Not authorized, token not available"));
+    if (!token) return next(new MError(401, "Not authorized, token not available"));
 
     jwt.verify(token, process.env.JWT_KEY, (err, decodedvalues) => {
-      if (err) return next(MError(401, "invalid token"));
+      if (err) return next(new MError(401, "invalid token"));
       res.cookie("jwt", "", { maxAge: "1" }).redirect("/");
     });
   };
@@ -298,7 +305,7 @@ exports.register = async (req, res, next) => {
     const user = await MongooseDbManager.User.findOne({ email: email });
 
     if (!user) {
-      return next(MError(401, "make sure to enter a valid email"));
+      return next(new MError(401, "make sure to enter a valid email"));
     }else if (user.confirmed)
     {
       
@@ -329,9 +336,9 @@ exports.register = async (req, res, next) => {
         message: "email sent",
       });
     } catch (err) {
-      console.trace(err.message);
+      return next(err);
     }}else{
-      return next(MError(401, "Account is not confirmed,rerigester later"));
+      return next(new MError(401, "Account is not confirmed,rerigester later"));
     }
   };
 
@@ -340,11 +347,11 @@ exports.register = async (req, res, next) => {
     const confirm_newPassword = req.body.confirm_password;
     const confirmationToken = req.body.token;
     if (newPassword !== confirm_newPassword) {
-      return next(MError(400, "passwords are not the same"));
+      return next(new MError(400, "passwords are not the same"));
     }
     if (!checkPassword(newPassword)) {
       return next(
-        MError(
+        new MError(
           400,
           "password is either too short or to long (must be >6 letters)"
         )
@@ -356,7 +363,7 @@ exports.register = async (req, res, next) => {
       process.env.RESET_JWT_KEY,
       async (err, decodedvalues) => {
         if (err) {
-          return next(MError(201, "request Expired"));
+          return next(new MError(201, "request Expired"));
         }
         const user = await MongooseDbManager.User.findOne({
           email: decodedvalues.email,
@@ -374,7 +381,7 @@ exports.register = async (req, res, next) => {
               message: "password changed succesfully",
             });
           } catch (err) {
-            console.trace(err.message);
+              return next(err);
           }
         } else {
           

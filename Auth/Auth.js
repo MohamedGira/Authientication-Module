@@ -52,7 +52,13 @@ return(req,res,next)=>{
   fn(req,res,next).catch(err=>next)
 } 
 }
-
+const emailer = new MailSender(
+  process.env.SMTP_HOST,
+  process.env.SMTP_PORT,
+  false,
+  process.env.APP_EMAIL,
+  process.env.APP_PASSWORD
+);
 async function createUser(req, res, username, email, passwordPlainText) {
   //returns promise =>true
   /*
@@ -60,17 +66,11 @@ async function createUser(req, res, username, email, passwordPlainText) {
   */
   try{
   const hash= await promisify(bcrypt.hash)(passwordPlainText, 10)
-  const registrationConfirmer = new MailSender(
-    process.env.SMTP_HOST,
-    process.env.SMTP_PORT,
-    false,
-    process.env.APP_EMAIL,
-    process.env.APP_PASSWORD
-  );
+  
   const cofirmationToken = jwt.sign({}, process.env.CONFIRMATION_JWT_KEY, {
     expiresIn: utils.REGISTRATION_TIMEOUT_SECS,
   });
-  await registrationConfirmer.sendHTMLMail(
+  await emailer.sendHTMLMail(
     email,
     "Confirm Registration",
     fs
@@ -309,13 +309,6 @@ exports.register = async (req, res, next) => {
     }else if (user.confirmed)
     {
       
-    const PasswordResetSender = new MailSender(
-      process.env.SMTP_HOST,
-      process.env.SMTP_PORT,
-      false,
-      process.env.APP_EMAIL,
-      process.env.APP_PASSWORD
-    );
 
     const resetToken = jwt.sign(
       { email: email, password: user.password },
@@ -323,7 +316,7 @@ exports.register = async (req, res, next) => {
       { expiresIn: utils.PASSWORD_RESET_TIMEOUT_SECS }
     );
     try {
-      await PasswordResetSender.sendHTMLMail(
+      await emailer.sendHTMLMail(
         email,
         "Reset Password",
         fs
